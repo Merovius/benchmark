@@ -43,7 +43,7 @@ func main() {
 	log.Printf("Joining with %d connections, sending %d messages\n",
 		numSessions, *numMessages)
 
-	sessions := make(map[int]*irc.Conn)
+	sessions := make([]*irc.Conn, numSessions)
 
 	for i := 0; i < numSessions; i++ {
 		rawconn, err := net.Dial("tcp", *target)
@@ -78,13 +78,13 @@ func main() {
 		Ts  int64
 		Num int64
 	}
-	latencies := make(map[int64]time.Duration)
+	latencies := make([]time.Duration, *numMessages)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	started := time.Now()
-	msgprefix := fmt.Sprintf(`PRIVMSG #bench :{"Ts":%d, "Num":`, started.UnixNano())
 	go func() {
-		for len(latencies) < *numMessages {
+		received := 0
+		for received < *numMessages {
 			msg, err := sessions[1].Decode()
 			if err != nil {
 				log.Fatal(err)
@@ -97,10 +97,12 @@ func main() {
 			if err := json.Unmarshal([]byte(msg.Trailing), &bm); err != nil {
 				log.Fatal(err)
 			}
-			latencies[bm.Num] = latency
+			latencies[int(bm.Num)] = latency
+			received++
 		}
 		wg.Done()
 	}()
+	msgprefix := fmt.Sprintf(`PRIVMSG #bench :{"Ts":%d, "Num":`, started.UnixNano())
 	lastProgress := time.Now()
 	for i := 0; i < *numMessages; i++ {
 		if _, err := sessions[0].Write([]byte(msgprefix + strconv.Itoa(i) + "}\r\n")); err != nil {
@@ -115,9 +117,9 @@ func main() {
 	wg.Wait()
 	log.Printf("Received all messages.\n")
 	for i := 0; i < *numMessages; i++ {
-		log.Printf("%d: %v\n", i, latencies[int64(i)])
+		log.Printf("%d: %v\n", i, latencies[i])
 	}
-	mps := float64(*numMessages-1) / (float64(latencies[int64(*numMessages-1)]) / float64(time.Second))
+	mps := float64(*numMessages) / float64(latencies[*numMessages-1]) * float64(time.Second)
 	log.Printf("%f messages/s\n", mps)
 
 	for _, conn := range sessions {
