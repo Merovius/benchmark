@@ -17,14 +17,15 @@ import (
 	"github.com/sorcix/irc"
 )
 
+const (
+	// TODO(secure): make this a flag
+	numSessions = 2
+)
+
 var (
 	target = flag.String("target",
 		"localhost:6667",
 		"Target to connect to")
-
-	numSessions = flag.Int("sessions",
-		2,
-		"Number of sessions to create")
 
 	numMessages = flag.Int("messages",
 		1000,
@@ -40,11 +41,11 @@ func main() {
 	}
 
 	log.Printf("Joining with %d connections, sending %d messages\n",
-		*numSessions, *numMessages)
+		numSessions, *numMessages)
 
 	sessions := make(map[int]*irc.Conn)
 
-	for i := 0; i < *numSessions; i++ {
+	for i := 0; i < numSessions; i++ {
 		rawconn, err := net.Dial("tcp", *target)
 		if err != nil {
 			log.Fatal(err)
@@ -123,5 +124,5 @@ func main() {
 		conn.Close()
 	}
 
-	// TODO(secure): when *numSessions > 2, log how long until the message was seen first and how long until all sessions saw it
+	// TODO(secure): when numSessions > 2, log how long until the message was seen first and how long until all sessions saw it
 }
