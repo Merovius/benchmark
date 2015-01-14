@@ -27,6 +27,8 @@ var (
 		1000,
 		"Number of messages to send")
 
+	// TODO(secure): increase the default number of sessions once we know what
+	// sort of performance to expect.
 	numSessions = flag.Int("sessions",
 		2,
 		"Number of sessions to use. The first one is used to receive messages, all others send")
@@ -34,6 +36,10 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if *numSessions < 2 {
+		log.Fatal("-sessions needs to be 2 or higher (specified %d)", *numSessions)
+	}
 
 	// TODO(secure): verify that cpu governor is on performance
 	if os.Getenv("GOMAXPROCS") == "" {
@@ -105,6 +111,9 @@ func main() {
 	msgprefix := fmt.Sprintf(`PRIVMSG #bench :{"Ts":%d, "Num":`, started.UnixNano())
 	lastProgress := time.Now()
 	for i := 0; i < *numMessages; i++ {
+		// TODO(secure): make the strategy configurable. round robin maxes out
+		// throttling limits, whereas random reflects real-life use-cases a bit
+		// better.
 		sessidx := 1 + rand.Intn(len(sessions)-1)
 		if _, err := sessions[sessidx].Write([]byte(msgprefix + strconv.Itoa(i) + "}\r\n")); err != nil {
 			log.Fatal(err)
