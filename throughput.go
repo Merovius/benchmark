@@ -112,11 +112,12 @@ func main() {
 					// session[0] only receives messages, so it must ping/pong
 					// with the bridge in order to not time out.
 					if msg.Command == irc.PING {
-						if err := sessions[0].Encode(&irc.Message{
+						err := sessions[0].Encode(&irc.Message{
 							Command:  irc.PONG,
 							Params:   msg.Params,
 							Trailing: msg.Trailing,
-						}); err != nil {
+						})
+						if err != nil {
 							log.Fatal(err)
 						}
 					}
