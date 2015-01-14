@@ -35,6 +35,10 @@ var (
 func main() {
 	flag.Parse()
 
+	if *numSessions < 2 {
+		log.Fatal("-sessions needs to be 2 or higher (specified %d)", *numSessions)
+	}
+
 	// TODO(secure): verify that cpu governor is on performance
 	if os.Getenv("GOMAXPROCS") == "" {
 		runtime.GOMAXPROCS(runtime.NumCPU())
