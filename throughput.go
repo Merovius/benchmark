@@ -141,6 +141,8 @@ func main() {
 		mps := float32(received) / float32(time.Since(started)) * float32(time.Second)
 		numMessages = int(0.4*(mps*1.5) + 0.6*float32(numMessages))
 		log.Printf("Received %d messages, i.e. %f mps (sending %d msgs next)\n", received, mps, numMessages)
-		fmt.Fprintf(f, "%d %f\n", time.Now().Unix(), mps)
+		if *gnuplot != "" {
+			fmt.Fprintf(f, "%d %f\n", time.Now().Unix(), mps)
+		}
 	}
 }
