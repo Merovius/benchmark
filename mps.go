@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"runtime"
@@ -17,11 +18,6 @@ import (
 	"github.com/sorcix/irc"
 )
 
-const (
-	// TODO(secure): make this a flag
-	numSessions = 2
-)
-
 var (
 	target = flag.String("target",
 		"localhost:6667",
@@ -30,6 +26,10 @@ var (
 	numMessages = flag.Int("messages",
 		1000,
 		"Number of messages to send")
+
+	numSessions = flag.Int("sessions",
+		2,
+		"Number of sessions to use. The first one is used to receive messages, all others send")
 )
 
 func main() {
@@ -41,11 +41,11 @@ func main() {
 	}
 
 	log.Printf("Joining with %d connections, sending %d messages\n",
-		numSessions, *numMessages)
+		*numSessions, *numMessages)
 
-	sessions := make([]*irc.Conn, numSessions)
+	sessions := make([]*irc.Conn, *numSessions)
 
-	for i := 0; i < numSessions; i++ {
+	for i := 0; i < *numSessions; i++ {
 		rawconn, err := net.Dial("tcp", *target)
 		if err != nil {
 			log.Fatal(err)
@@ -85,7 +85,7 @@ func main() {
 	go func() {
 		received := 0
 		for received < *numMessages {
-			msg, err := sessions[1].Decode()
+			msg, err := sessions[0].Decode()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -105,7 +105,8 @@ func main() {
 	msgprefix := fmt.Sprintf(`PRIVMSG #bench :{"Ts":%d, "Num":`, started.UnixNano())
 	lastProgress := time.Now()
 	for i := 0; i < *numMessages; i++ {
-		if _, err := sessions[0].Write([]byte(msgprefix + strconv.Itoa(i) + "}\r\n")); err != nil {
+		sessidx := 1 + rand.Intn(len(sessions)-1)
+		if _, err := sessions[sessidx].Write([]byte(msgprefix + strconv.Itoa(i) + "}\r\n")); err != nil {
 			log.Fatal(err)
 		}
 		if time.Since(lastProgress) > 1*time.Second {
