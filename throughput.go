@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"time"
 
 	"github.com/sorcix/irc"
@@ -27,6 +26,10 @@ var (
 		2,
 		"Number of sessions to use. The first one is used to receive messages, all others send")
 
+	numChannels = flag.Int("channels",
+		0,
+		"Number of channels to use. Defaults to -sessions / 50.")
+
 	gnuplot = flag.String("gnuplot",
 		"",
 		"Directory in which to store GNUplot data files")
@@ -39,12 +42,16 @@ func main() {
 		log.Fatal("-sessions needs to be 2 or higher (specified %d)", *numSessions)
 	}
 
+	if *numChannels == 0 {
+		*numChannels = *numSessions / 50
+	}
+
 	// TODO(secure): verify that cpu governor is on performance
 	if os.Getenv("GOMAXPROCS") == "" {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
-	log.Printf("Joining with %d connections\n", *numSessions)
+	log.Printf("Joining %d channels with %d connections\n", *numChannels, *numSessions)
 
 	sessions := make([]*irc.Conn, *numSessions)
 
@@ -58,8 +65,16 @@ func main() {
 		if _, err := conn.Write([]byte(fmt.Sprintf("NICK bench-%d\r\n", i))); err != nil {
 			log.Fatal(err)
 		}
-		if _, err := conn.Write([]byte("JOIN #bench\r\n")); err != nil {
-			log.Fatal(err)
+		if i == 0 {
+			for j := 0; j < *numChannels; j++ {
+				if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", j))); err != nil {
+					log.Fatal(err)
+				}
+			}
+		} else {
+			if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", i%*numChannels))); err != nil {
+				log.Fatal(err)
+			}
 		}
 		// Wait until we see the RPL_ENDOFNAMES which is the last message that
 		// the server generates after a JOIN command.
@@ -74,6 +89,17 @@ func main() {
 			break
 		}
 		log.Printf("Session %d set up.\n", i)
+
+		if i > 0 {
+			// On all sessions but the receiver session, discard messages.
+			go func(session *irc.Conn) {
+				for {
+					if _, err := session.Decode(); err != nil {
+						log.Fatal(err)
+					}
+				}
+			}(conn)
+		}
 	}
 
 	var f *os.File
@@ -89,8 +115,9 @@ func main() {
 	numMessages := 50
 	decodeChan := make(chan *irc.Message)
 	go func() {
+		session := sessions[0]
 		for {
-			msg, err := sessions[0].Decode()
+			msg, err := session.Decode()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -125,10 +152,10 @@ func main() {
 			}
 		}()
 		started := time.Now()
-		msgprefix := fmt.Sprintf(`PRIVMSG #bench :{"Ts":%d, "Num":`, started.UnixNano())
 		for i := 0; i < numMessages; i++ {
 			sessidx := 1 + rand.Intn(len(sessions)-1)
-			if _, err := sessions[sessidx].Write([]byte(msgprefix + strconv.Itoa(i) + "}\r\n")); err != nil {
+			msg := fmt.Sprintf(`PRIVMSG #bench-%d :{"Ts":%d, "Num":%d}`+"\r\n", sessidx%*numChannels, started.UnixNano(), i)
+			if _, err := sessions[sessidx].Write([]byte(msg)); err != nil {
 				log.Fatal(err)
 			}
 			if time.Since(started) > 1*time.Second {
