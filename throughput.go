@@ -30,6 +30,10 @@ var (
 		0,
 		"Number of channels to use. Defaults to -sessions / 50.")
 
+	lbPolicy = flag.String("load_balancing_policy",
+		"random",
+		"Load-balancing policy, determining on which sessions to send messages. Can be one of 'random' or 'round-robin'.")
+
 	gnuplot = flag.String("gnuplot",
 		"",
 		"Directory in which to store GNUplot data files")
@@ -155,8 +159,15 @@ func main() {
 			}
 		}()
 		started := time.Now()
+		var sessidx int
+		rr := 0
 		for i := 0; i < numMessages; i++ {
-			sessidx := 1 + rand.Intn(len(sessions)-1)
+			if *lbPolicy == "random" {
+				sessidx = 1 + rand.Intn(len(sessions)-1)
+			} else {
+				sessidx = 1 + (rr % (len(sessions) - 1))
+				rr++
+			}
 			msg := fmt.Sprintf(`PRIVMSG #bench-%d :{"Ts":%d, "Num":%d}`+"\r\n", sessidx%*numChannels, started.UnixNano(), i)
 			if _, err := sessions[sessidx].Write([]byte(msg)); err != nil {
 				log.Fatal(err)
