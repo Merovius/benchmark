@@ -65,6 +65,9 @@ func main() {
 		if _, err := conn.Write([]byte(fmt.Sprintf("NICK bench-%d\r\n", i))); err != nil {
 			log.Fatal(err)
 		}
+		if _, err := conn.Write([]byte("USER bench 0 * :bench\r\n")); err != nil {
+			log.Fatal(err)
+		}
 		if i == 0 {
 			for j := 0; j < *numChannels; j++ {
 				if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", j))); err != nil {
