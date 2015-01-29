@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/sorcix/irc"
@@ -58,56 +59,67 @@ func main() {
 	log.Printf("Joining %d channels with %d connections\n", *numChannels, *numSessions)
 
 	sessions := make([]*irc.Conn, *numSessions)
+	var sessionsMu sync.Mutex
+
+	var wg sync.WaitGroup
 
 	for i := 0; i < *numSessions; i++ {
-		rawconn, err := net.Dial("tcp", *target)
-		if err != nil {
-			log.Fatal(err)
-		}
-		conn := irc.NewConn(rawconn)
-		sessions[i] = conn
-		if _, err := conn.Write([]byte(fmt.Sprintf("NICK bench-%d\r\n", i))); err != nil {
-			log.Fatal(err)
-		}
-		if _, err := conn.Write([]byte("USER bench 0 * :bench\r\n")); err != nil {
-			log.Fatal(err)
-		}
-		if i == 0 {
-			for j := 0; j < *numChannels; j++ {
-				if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", j))); err != nil {
-					log.Fatal(err)
-				}
-			}
-		} else {
-			if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", i%*numChannels))); err != nil {
-				log.Fatal(err)
-			}
-		}
-		// Wait until we see the RPL_ENDOFNAMES which is the last message that
-		// the server generates after a JOIN command.
-		for {
-			msg, err := conn.Decode()
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rawconn, err := net.Dial("tcp", *target)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if msg.Command != irc.RPL_ENDOFNAMES {
-				continue
+			conn := irc.NewConn(rawconn)
+			sessionsMu.Lock()
+			sessions[i] = conn
+			sessionsMu.Unlock()
+			if _, err := conn.Write([]byte(fmt.Sprintf("NICK bench-%d\r\n", i))); err != nil {
+				log.Fatal(err)
 			}
-			break
-		}
-		log.Printf("Session %d set up.\n", i)
-
-		if i > 0 {
-			// On all sessions but the receiver session, discard messages.
-			go func(session *irc.Conn) {
-				for {
-					if _, err := session.Decode(); err != nil {
+			if _, err := conn.Write([]byte("USER bench 0 * :bench\r\n")); err != nil {
+				log.Fatal(err)
+			}
+			if i == 0 {
+				for j := 0; j < *numChannels; j++ {
+					if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", j))); err != nil {
 						log.Fatal(err)
 					}
 				}
-			}(conn)
-		}
+			} else {
+				if _, err := conn.Write([]byte(fmt.Sprintf("JOIN #bench-%d\r\n", i%*numChannels))); err != nil {
+					log.Fatal(err)
+				}
+			}
+			// Wait until we see the RPL_ENDOFNAMES which is the last message that
+			// the server generates after a JOIN command.
+			for {
+				msg, err := conn.Decode()
+				if err != nil {
+					log.Fatal(err)
+				}
+				if msg.Command != irc.RPL_ENDOFNAMES {
+					continue
+				}
+				break
+			}
+			log.Printf("Session %d set up.\n", i)
+
+			if i > 0 {
+				// On all sessions but the receiver session, discard messages.
+				go func(session *irc.Conn) {
+					for {
+						if _, err := session.Decode(); err != nil {
+							log.Fatal(err)
+						}
+					}
+				}(conn)
+			}
+		}(i)
 	}
+	wg.Wait()
+	log.Printf("All sessions set up.\n")
 
 	var f *os.File
 	if *gnuplot != "" {
