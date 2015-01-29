@@ -117,6 +117,7 @@ func main() {
 				}(conn)
 			}
 		}(i)
+		time.Sleep(50 * time.Millisecond)
 	}
 	wg.Wait()
 	log.Printf("All sessions set up.\n")
