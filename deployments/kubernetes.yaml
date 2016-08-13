@@ -1,0 +1,15 @@
+imports:
+- path: kubernetes.jinja
+- path: tls/cert.pem
+- path: tls/key.pem
+- path: prometheus/prometheus.conf
+- path: prometheus/robustirc.rules
+- path: config/config.toml
+- path: dashboards/robustirc.json
+- path: dashboards/robustirc_loadtest.json
+
+resources:
+- name: kubernetes
+  type: kubernetes.jinja
+  properties:
+    clusterType: loadtest-type

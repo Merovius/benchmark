@@ -1,2 +1,3 @@
 /ca-certificates.crt
 /throughput
+/cmd/robustirc-loadtest/loadtest

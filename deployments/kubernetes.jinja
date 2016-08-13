@@ -1,0 +1,265 @@
+{% set CLUSTER_TYPE = env['project'] + '/' + properties['clusterType'] %}
+
+{% set IMAGE_PREFIX = 'eu.gcr.io/' + env['project'] %}
+
+{% set COLLECTION_PREFIX = '/api/v1/namespaces/{namespace}/' %}
+{% set RC_COLLECTION = COLLECTION_PREFIX + 'replicationcontrollers' %}
+{% set SERVICE_COLLECTION = COLLECTION_PREFIX + 'services' %}
+{% set CONFIGMAP_COLLECTION = COLLECTION_PREFIX + 'configmaps' %}
+
+resources:
+{% for nodenum in range(1, 4) %}
+- name: robustirc-node-rc-{{ nodenum }}
+  type: {{ CLUSTER_TYPE }}:{{ RC_COLLECTION }}
+  properties:
+    apiVersion: v1
+    kind: ReplicationController
+    namespace: default
+    metadata:
+      name: robustirc-node-{{ nodenum }}
+    spec:
+      replicas: 1
+      selector:
+        app: robustirc-node
+        role: robustirc-node-{{ nodenum }}
+      template:
+        metadata:
+          labels:
+            app: robustirc-node
+            role: robustirc-node-{{ nodenum }}
+        spec:
+          restartPolicy: Always
+          dnsPolicy: ClusterFirst
+          #nodeSelector:
+          #  robustirc-node: "true"
+          securityContext:
+            # Specify fsGroup so that the volume is writable for the
+            # non-privileged uid/gid 99, which is used in robustirc's Dockerfile.
+            fsGroup: 99
+          containers:
+          - name: robustirc
+            image: {{ IMAGE_PREFIX }}/robustirc
+            command: [ "/bin/sh", "-c", "rm -rf /var/lib/robustirc/*; echo '[\"robustirc-node-1:8443\",\"robustirc-node-2:8443\",\"robustirc-node-3:8443\"]' > /var/lib/robustirc/peers.json && exec /usr/bin/robustirc -listen=:8443 -network_name=loadtest -network_password=k8s -peer_addr=robustirc-node-{{ nodenum }}:8443 -tls_cert_path=/etc/robustirc/tls/cert.pem -tls_ca_file=/etc/robustirc/tls/cert.pem -tls_key_path=/etc/robustirc/tls/key.pem"]
+            # Always do a docker pull when starting this pod to always pick up the
+            # latest robustirc Docker container version.
+            imagePullPolicy: Always
+            ports:
+            - name: robustirc
+              containerPort: 8443
+            volumeMounts:
+            - name: tls
+              mountPath: /etc/robustirc/tls
+              readOnly: true
+            - name: appdata
+              mountPath: /var/lib/robustirc
+            resources:
+              requests:
+                memory: "1024Mi"
+                cpu: "6000m"
+              limits:
+                memory: "1024Mi"
+                cpu: "6000m"
+          volumes:
+          - name: tls
+            configMap:
+              name: tls
+          - name: appdata
+            gcePersistentDisk:
+              pdName: robustirc-disk-{{ nodenum }}
+              fsType: ext4
+
+- name: robustirc-node-svc-{{ nodenum }}
+  type: {{ CLUSTER_TYPE }}:{{ SERVICE_COLLECTION }}
+  properties:
+    apiVersion: v1
+    kind: Service
+    namespace: default
+    metadata:
+      name: robustirc-node-{{ nodenum }}
+    spec:
+      ports:
+      - name: robustirc
+        port: 8443
+        targetPort: 8443
+      selector:
+        role: robustirc-node-{{ nodenum }}
+{% endfor %}
+
+- name: tls-configmap
+  type: {{ CLUSTER_TYPE }}:{{ CONFIGMAP_COLLECTION }}
+  properties:
+    apiVersion: v1
+    namespace: default
+    kind: ConfigMap
+    metadata:
+      name: "tls"
+    data:
+      cert.pem: |
+{{ imports["tls/cert.pem"]|indent(8, true) }}
+      key.pem: |
+{{ imports["tls/key.pem"]|indent(8, true) }}
+
+- name: prometheus-configmap
+  type: {{ CLUSTER_TYPE }}:{{ CONFIGMAP_COLLECTION }}
+  properties:
+    apiVersion: v1
+    namespace: default
+    kind: ConfigMap
+    metadata:
+      name: "prometheus"
+    data:
+      prometheus.conf: |
+{{ imports["prometheus/prometheus.conf"]|indent(8, true) }}
+      robustirc.rules: |
+{{ imports["prometheus/robustirc.rules"]|indent(8, true) }}
+
+- name: config-configmap
+  type: {{ CLUSTER_TYPE }}:{{ CONFIGMAP_COLLECTION }}
+  properties:
+    apiVersion: v1
+    namespace: default
+    kind: ConfigMap
+    metadata:
+      name: "config"
+    data:
+      config.toml: |
+{{ imports["config/config.toml"]|indent(8, true) }}
+
+- name: dashboards-configmap
+  type: {{ CLUSTER_TYPE }}:{{ CONFIGMAP_COLLECTION }}
+  properties:
+    apiVersion: v1
+    namespace: default
+    kind: ConfigMap
+    metadata:
+      name: "dashboards"
+    data:
+      robustirc.json: |
+{{ imports["dashboards/robustirc.json"]|indent(8, true) }}
+      robustirc-loadtest.json: |
+{{ imports["dashboards/robustirc_loadtest.json"]|indent(8, true) }}
+
+- name: bridge-rc
+  type: {{ CLUSTER_TYPE }}:{{ RC_COLLECTION }}
+  properties:
+    apiVersion: v1
+    kind: ReplicationController
+    namespace: default
+    metadata:
+      name: bridge
+    spec:
+      replicas: 1
+      selector:
+        app: bridge
+      template:
+        metadata:
+          labels:
+            app: bridge
+        spec:
+          restartPolicy: Always
+          dnsPolicy: ClusterFirst
+          containers:
+          - name: bridge
+            image: {{ IMAGE_PREFIX }}/bridge
+            args: [
+              "-network=robustirc-node-1:8443,robustirc-node-2:8443,robustirc-node-3:8443",
+              "-socks=",
+              "-tls_ca_file=/etc/robustirc/tls/cert.pem",
+            ]
+            # Always do a docker pull when starting this pod to pick up new
+            # versions.
+            imagePullPolicy: Always
+            ports:
+            - name: irc
+              containerPort: 6667
+            volumeMounts:
+            - name: tls
+              mountPath: /etc/robustirc/tls
+              readOnly: true
+          volumes:
+          - name: tls
+            configMap:
+              name: tls
+
+- name: bridge-svc
+  type: {{ CLUSTER_TYPE }}:{{ SERVICE_COLLECTION }}
+  properties:
+    apiVersion: v1
+    kind: Service
+    namespace: default
+    metadata:
+      name: bridge
+    spec:
+      ports:
+      - name: irc
+        port: 6667
+        targetPort: 6667
+      selector:
+        app: bridge
+
+- name: prometheus-rc
+  type: {{ CLUSTER_TYPE }}:{{ RC_COLLECTION }}
+  properties:
+    apiVersion: v1
+    kind: ReplicationController
+    namespace: default
+    metadata:
+      name: prometheus
+    spec:
+      replicas: 1
+      selector:
+        app: prometheus
+        role: prometheus
+      template:
+        metadata:
+          labels:
+            app: prometheus
+            role: prometheus
+        spec:
+          restartPolicy: Always
+          dnsPolicy: ClusterFirst
+          containers:
+          - name: prometheus
+            image: prom/prometheus
+            args: ["-config.file=/etc/prometheus-config/prometheus.conf"]
+            imagePullPolicy: Always
+            ports:
+            - name: prometheus
+              containerPort: 9090
+            volumeMounts:
+            - name: tls
+              mountPath: /etc/robustirc/tls
+              readOnly: true
+            - name: prometheus
+              mountPath: /etc/prometheus-config
+              readOnly: true
+            resources:
+              requests:
+                memory: "1024Mi"
+                cpu: "1000m"
+          volumes:
+          - name: tls
+            configMap:
+              name: tls
+          - name: prometheus
+            configMap:
+              name: prometheus
+
+- name: prometheus-svc
+  type: {{ CLUSTER_TYPE }}:{{ SERVICE_COLLECTION }}
+  properties:
+    apiVersion: v1
+    kind: Service
+    namespace: default
+    metadata:
+      name: prometheus
+    spec:
+      ports:
+      - name: prometheus
+        port: 9090
+        targetPort: 9090
+        # Externally reachable on the ephemeral IP of the GCE VM, port 30909
+        nodePort: 30909
+      selector:
+        app: prometheus
+      type: NodePort

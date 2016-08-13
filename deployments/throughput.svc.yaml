@@ -1,0 +1,12 @@
+# vim:ts=2:sw=2:et
+apiVersion: v1
+kind: Service
+metadata:
+  name: throughput
+spec:
+  ports:
+  - name: throughput
+    port: 9979
+    targetPort: 9979
+  selector:
+    app: throughput

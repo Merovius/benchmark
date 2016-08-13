@@ -1,0 +1,6 @@
+SessionExpiration = "10m0s"
+
+# Disable throttling for benchmarks
+PostMessageCooloff = "0"
+
+# TODO(later): configure compaction interval to be more aggressive, so that the load test includes compaction
