@@ -333,7 +333,7 @@ func loadtest() error {
 
 	for _, path := range requiredPaths {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return fmt.Errorf("Required file %q not found. Are you running this loadtest from $GOPATH/src/github.com/robustirc/benchmark?")
+			return fmt.Errorf("Required file %q not found. Are you running this loadtest from $GOPATH/src/github.com/robustirc/benchmark?", path)
 		}
 	}
 
