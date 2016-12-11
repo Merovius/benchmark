@@ -16,11 +16,11 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
-	"k8s.io/kubernetes/pkg/labels"
-	"k8s.io/kubernetes/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
+	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/labels"
+	"k8s.io/client-go/pkg/util/wait"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/stapelberg/loggedexec"
 )
@@ -118,16 +118,16 @@ var defaultBackoff = wait.Backoff{
 	Steps:    7,   // 7 backoff steps results in a total timeout of about a minute.
 }
 
-func waitForPodToSucceed(client *unversioned.Client, podName string, backoff wait.Backoff) error {
+func waitForPodToSucceed(client *kubernetes.Clientset, podName string, backoff wait.Backoff) error {
 	condition := func() (bool, error) {
-		pod, err := client.Pods(api.NamespaceDefault).Get(podName)
+		pod, err := client.Pods(apiv1.NamespaceDefault).Get(podName)
 		if err != nil {
 			return false, err
 		}
-		if pod.Status.Phase == api.PodFailed {
-			return true, fmt.Errorf("Pod entered status %v", api.PodFailed)
+		if pod.Status.Phase == apiv1.PodFailed {
+			return true, fmt.Errorf("Pod entered status %v", apiv1.PodFailed)
 		}
-		if got, want := pod.Status.Phase, api.PodSucceeded; got != want {
+		if got, want := pod.Status.Phase, apiv1.PodSucceeded; got != want {
 			log.Printf("pod %q has not succeeded yet: got %q, want %q", podName, got, want)
 			return false, nil
 		} else {
@@ -165,17 +165,17 @@ func buildContainers(dir, name string) error {
 	return loggedexec.Command("gcloud", "docker", "push", gcrPath).Run()
 }
 
-func runThroughputBenchmark(client *unversioned.Client) error {
-	if _, err := client.Pods(api.NamespaceDefault).Get("throughput"); err == nil {
+func runThroughputBenchmark(client *kubernetes.Clientset) error {
+	if _, err := client.Core().Pods(apiv1.NamespaceDefault).Get("throughput"); err == nil {
 		log.Printf("deleting pod")
-		if err := client.Pods(api.NamespaceDefault).Delete("throughput", &api.DeleteOptions{}); err != nil {
+		if err := client.Core().Pods(apiv1.NamespaceDefault).Delete("throughput", &apiv1.DeleteOptions{}); err != nil {
 			return err
 		}
 	}
 
-	if _, err := client.Services(api.NamespaceDefault).Get("throughput"); err == nil {
+	if _, err := client.Core().Services(apiv1.NamespaceDefault).Get("throughput"); err == nil {
 		log.Printf("deleting service")
-		if err := client.Services(api.NamespaceDefault).Delete("throughput"); err != nil {
+		if err := client.Core().Services(apiv1.NamespaceDefault).Delete("throughput", &apiv1.DeleteOptions{}); err != nil {
 			return err
 		}
 	}
@@ -183,7 +183,7 @@ func runThroughputBenchmark(client *unversioned.Client) error {
 	// Wait for the pod to actually be deleted, as per
 	// https://github.com/kubernetes/kubernetes/issues/28115
 	condition := func() (bool, error) {
-		_, err := client.Pods(api.NamespaceDefault).Get("throughput")
+		_, err := client.Core().Pods(apiv1.NamespaceDefault).Get("throughput")
 		return (err != nil), nil
 	}
 
@@ -259,11 +259,11 @@ func createFirewallRule() error {
 // TODO: add a flag to disable restarting the network so that we can
 // run repeated benchmarks. messages seem to drop significantly when
 // doing that, not yet sure why
-func restartNetwork(client *unversioned.Client) error {
+func restartNetwork(client *kubernetes.Clientset) error {
 	// Set replicas==0 on all Replication Controllers with
 	// app=robustirc-node to delete all RobustIRC node pods.
-	replicationControllers, err := client.ReplicationControllers(api.NamespaceDefault).List(api.ListOptions{
-		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector(),
+	replicationControllers, err := client.Core().ReplicationControllers(apiv1.NamespaceDefault).List(apiv1.ListOptions{
+		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector().String(),
 	})
 	if err != nil {
 		return err
@@ -273,16 +273,17 @@ func restartNetwork(client *unversioned.Client) error {
 	}
 	log.Printf("Restarting Replication Controllers with app=robustirc-node label")
 	for _, rc := range replicationControllers.Items {
-		rc.Spec.Replicas = 0
-		if _, err := client.ReplicationControllers(api.NamespaceDefault).Update(&rc); err != nil {
+		replicas := int32(0)
+		rc.Spec.Replicas = &replicas
+		if _, err := client.Core().ReplicationControllers(apiv1.NamespaceDefault).Update(&rc); err != nil {
 			return err
 		}
 	}
 
 	// Wait until existingPods returns 0 pods, to be sure we get a new network.
 	condition := func() (bool, error) {
-		existingPods, err := client.Pods(api.NamespaceDefault).List(api.ListOptions{
-			LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector(),
+		existingPods, err := client.Core().Pods(apiv1.NamespaceDefault).List(apiv1.ListOptions{
+			LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector().String(),
 		})
 		return len(existingPods.Items) == 0, err
 	}
@@ -296,15 +297,16 @@ func restartNetwork(client *unversioned.Client) error {
 	}
 
 	// Bring the network back up.
-	replicationControllers, err = client.ReplicationControllers(api.NamespaceDefault).List(api.ListOptions{
-		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector(),
+	replicationControllers, err = client.Core().ReplicationControllers(apiv1.NamespaceDefault).List(apiv1.ListOptions{
+		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector().String(),
 	})
 	if err != nil {
 		return err
 	}
 	for _, rc := range replicationControllers.Items {
-		rc.Spec.Replicas = 1
-		if _, err := client.ReplicationControllers(api.NamespaceDefault).Update(&rc); err != nil {
+		replicas := int32(1)
+		rc.Spec.Replicas = &replicas
+		if _, err := client.Core().ReplicationControllers(apiv1.NamespaceDefault).Update(&rc); err != nil {
 			return err
 		}
 	}
@@ -372,7 +374,7 @@ func loadtest() error {
 		return err
 	}
 
-	kubeClient, err := unversioned.New(kubeConfig)
+	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
 		return err
 	}
@@ -404,7 +406,7 @@ func loadtest() error {
 		return err
 	}
 
-	body, err := kubeClient.Pods(api.NamespaceDefault).GetLogs("throughput", &api.PodLogOptions{}).Do().Raw()
+	body, err := kubeClient.Core().Pods(apiv1.NamespaceDefault).GetLogs("throughput", &apiv1.PodLogOptions{}).Do().Raw()
 	if err != nil {
 		return err
 	}
