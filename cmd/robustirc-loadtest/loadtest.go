@@ -16,11 +16,12 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"k8s.io/client-go/kubernetes"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/labels"
-	"k8s.io/client-go/pkg/util/wait"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/1.5/kubernetes"
+	"k8s.io/client-go/1.5/pkg/api"
+	apiv1 "k8s.io/client-go/1.5/pkg/api/v1"
+	"k8s.io/client-go/1.5/pkg/labels"
+	"k8s.io/client-go/1.5/pkg/util/wait"
+	"k8s.io/client-go/1.5/tools/clientcmd"
 
 	"github.com/stapelberg/loggedexec"
 )
@@ -168,14 +169,14 @@ func buildContainers(dir, name string) error {
 func runThroughputBenchmark(client *kubernetes.Clientset) error {
 	if _, err := client.Core().Pods(apiv1.NamespaceDefault).Get("throughput"); err == nil {
 		log.Printf("deleting pod")
-		if err := client.Core().Pods(apiv1.NamespaceDefault).Delete("throughput", &apiv1.DeleteOptions{}); err != nil {
+		if err := client.Core().Pods(apiv1.NamespaceDefault).Delete("throughput", &api.DeleteOptions{}); err != nil {
 			return err
 		}
 	}
 
 	if _, err := client.Core().Services(apiv1.NamespaceDefault).Get("throughput"); err == nil {
 		log.Printf("deleting service")
-		if err := client.Core().Services(apiv1.NamespaceDefault).Delete("throughput", &apiv1.DeleteOptions{}); err != nil {
+		if err := client.Core().Services(apiv1.NamespaceDefault).Delete("throughput", &api.DeleteOptions{}); err != nil {
 			return err
 		}
 	}
@@ -262,8 +263,8 @@ func createFirewallRule() error {
 func restartNetwork(client *kubernetes.Clientset) error {
 	// Set replicas==0 on all Replication Controllers with
 	// app=robustirc-node to delete all RobustIRC node pods.
-	replicationControllers, err := client.Core().ReplicationControllers(apiv1.NamespaceDefault).List(apiv1.ListOptions{
-		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector().String(),
+	replicationControllers, err := client.Core().ReplicationControllers(apiv1.NamespaceDefault).List(api.ListOptions{
+		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector(),
 	})
 	if err != nil {
 		return err
@@ -282,8 +283,8 @@ func restartNetwork(client *kubernetes.Clientset) error {
 
 	// Wait until existingPods returns 0 pods, to be sure we get a new network.
 	condition := func() (bool, error) {
-		existingPods, err := client.Core().Pods(apiv1.NamespaceDefault).List(apiv1.ListOptions{
-			LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector().String(),
+		existingPods, err := client.Core().Pods(apiv1.NamespaceDefault).List(api.ListOptions{
+			LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector(),
 		})
 		return len(existingPods.Items) == 0, err
 	}
@@ -297,8 +298,8 @@ func restartNetwork(client *kubernetes.Clientset) error {
 	}
 
 	// Bring the network back up.
-	replicationControllers, err = client.Core().ReplicationControllers(apiv1.NamespaceDefault).List(apiv1.ListOptions{
-		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector().String(),
+	replicationControllers, err = client.Core().ReplicationControllers(apiv1.NamespaceDefault).List(api.ListOptions{
+		LabelSelector: labels.Set{"app": "robustirc-node"}.AsSelector(),
 	})
 	if err != nil {
 		return err
