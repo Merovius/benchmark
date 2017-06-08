@@ -163,7 +163,7 @@ func buildContainers(dir, name string) error {
 		return err
 	}
 
-	return loggedexec.Command("gcloud", "docker", "push", gcrPath).Run()
+	return loggedexec.Command("gcloud", "docker", "--", "push", gcrPath).Run()
 }
 
 func runThroughputBenchmark(client *kubernetes.Clientset) error {
