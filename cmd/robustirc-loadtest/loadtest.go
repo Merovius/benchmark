@@ -461,7 +461,7 @@ func deleteManifest(baseUrl, image, manifest string) error {
 	if err != nil {
 		return err
 	}
-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+	if got, want := resp.StatusCode, http.StatusAccepted; got != want {
 		return fmt.Errorf("%q: Unexpected HTTP status code: got %d, want %d", url, got, want)
 	}
 	return nil
