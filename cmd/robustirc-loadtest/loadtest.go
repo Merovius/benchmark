@@ -363,7 +363,7 @@ func loadtest() error {
 
 	// log.Printf("external IPs = %+v", ips)
 
-	if err := loggedexec.Command("gcloud", "container", "clusters", "get-credentials", gkeClusterName).Run(); err != nil {
+	if err := loggedexec.Command("gcloud", "container", "clusters", "get-credentials", "--zone", "europe-west1-d", gkeClusterName).Run(); err != nil {
 		return err
 	}
 
