@@ -10,7 +10,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/prometheus/client_golang/api/prometheus"
+	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
 
@@ -24,8 +24,8 @@ type snapshotData struct {
 	Metric model.Metric `json:"-"`
 }
 
-func datapointsQuery(api prometheus.QueryAPI, query string, queryRange prometheus.Range) ([]snapshotData, error) {
-	val, err := api.QueryRange(context.Background(), query, queryRange)
+func datapointsQuery(api prometheus.API, query string, queryRange prometheus.Range) ([]snapshotData, error) {
+	val, _, err := api.QueryRange(context.Background(), query, queryRange)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func renderTemplate(format string, metric model.Metric) string {
 
 // Snapshot snapshots a dashboard (as untyped JSON, i.e. interface{})
 // by querying data in the specified interval from Prometheus.
-func Snapshot(rdashboard interface{}, queryAPI prometheus.QueryAPI, start, end time.Time) (interface{}, error) {
+func Snapshot(rdashboard interface{}, queryAPI prometheus.API, start, end time.Time) (interface{}, error) {
 	var (
 		g       errgroup.Group
 		panelMu sync.Mutex

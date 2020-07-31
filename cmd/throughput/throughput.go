@@ -20,8 +20,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	api_prometheus "github.com/prometheus/client_golang/api/prometheus"
+	"github.com/prometheus/client_golang/api"
+	api_prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/robustirc/benchmark/internal/grafana"
 	"github.com/robustirc/bridge/robustsession"
 	"github.com/robustirc/robustirc/util"
@@ -270,11 +272,11 @@ func setNetworkConfigFrom(servers []string, filename string) error {
 func snapshotMetrics(prometheusAddr, filename string) (string, error) {
 	const snapshotAPIAddr = "https://snapshot.raintank.io/api/snapshots"
 
-	client, err := api_prometheus.New(api_prometheus.Config{Address: "http://" + prometheusAddr})
+	client, err := api.NewClient(api.Config{Address: "http://" + prometheusAddr})
 	if err != nil {
 		return "", err
 	}
-	api := api_prometheus.NewQueryAPI(client)
+	api := api_prometheus.NewAPI(client)
 
 	end := time.Now()
 	start := end.Add(-10 * time.Minute)
@@ -425,7 +427,7 @@ func main() {
 	if *listen != "" {
 		go func() {
 			log.Printf("Listening on %q", *listen)
-			http.Handle("/metrics", prometheus.Handler())
+			http.Handle("/metrics", promhttp.Handler())
 			log.Fatal(http.ListenAndServe(*listen, nil))
 		}()
 	}
