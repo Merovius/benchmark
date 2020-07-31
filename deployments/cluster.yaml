@@ -37,18 +37,28 @@ resources:
         password: pSnifTOjoFbMg0pXxaLUDwz
 
 - name: loadtest-type
-  type: deploymentmanager.alpha.type
+  type: deploymentmanager.v2beta.typeProvider
   properties:
-    configurableService:
-      options:
-        validationOptions:
-          # https://github.com/kubernetes/kubernetes/issues/2971
-          schemaValidation: IGNORE_WITH_WARNINGS
-      descriptorUrl: https://$(ref.loadtest.endpoint)/swaggerapi/api/v1
-      credential:
-        basicAuth:
-          user: $(ref.loadtest.masterAuth.username)
-          password: $(ref.loadtest.masterAuth.password)
+    options:
+      validationOptions:
+        # https://github.com/kubernetes/kubernetes/issues/2971
+        schemaValidation: FAIL
+
+      inputMappings:
+      - fieldName: name
+        location: PATH
+        methodMatch: ^(GET|DELETE|PUT)$
+        value: $.ifNull($.resource.properties.metadata.name, $.resource.name)
+      - fieldName: metadata.name
+        location: BODY
+        methodMatch: ^(PUT|POST)$
+        value: $.ifNull($.resource.properties.metadata.name, $.resource.name)
+      - fieldName: Authorization
+        location: HEADER
+        value: >
+          $.concat("Bearer ", $.googleOauth2AccessToken())
+
+    descriptorUrl: https://$(ref.loadtest.endpoint)/openapi/v2
 
 outputs:
 - name: clusterType
