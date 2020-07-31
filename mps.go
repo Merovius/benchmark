@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sorcix/irc"
+	"gopkg.in/sorcix/irc.v2"
 )
 
 var (

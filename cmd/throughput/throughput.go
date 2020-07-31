@@ -25,7 +25,7 @@ import (
 	"github.com/robustirc/benchmark/internal/grafana"
 	"github.com/robustirc/bridge/robustsession"
 	"github.com/robustirc/robustirc/util"
-	"github.com/sorcix/irc"
+	"gopkg.in/sorcix/irc.v2"
 )
 
 // token is an anonymous type used for throttling
@@ -193,7 +193,7 @@ func runWorker(tokens <-chan token, idx int) error {
 				continue
 			}
 
-			sent, err := strconv.ParseInt(ircmsg.Trailing, 0, 64)
+			sent, err := strconv.ParseInt(ircmsg.Trailing(), 0, 64)
 			if err != nil {
 				continue
 			}
