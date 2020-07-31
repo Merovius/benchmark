@@ -2,10 +2,9 @@
 
 {% set IMAGE_PREFIX = 'eu.gcr.io/' + env['project'] %}
 
-{% set COLLECTION_PREFIX = '/api/v1/namespaces/{namespace}/' %}
-{% set RC_COLLECTION = COLLECTION_PREFIX + 'replicationcontrollers' %}
-{% set SERVICE_COLLECTION = COLLECTION_PREFIX + 'services' %}
-{% set CONFIGMAP_COLLECTION = COLLECTION_PREFIX + 'configmaps' %}
+{% set RC_COLLECTION = '/api/v1/namespaces/{namespace}/replicationcontrollers/{name}' %}
+{% set SERVICE_COLLECTION = '/api/v1/namespaces/{namespace}/services/{name}' %}
+{% set CONFIGMAP_COLLECTION = '/api/v1/namespaces/{namespace}/configmaps/{name}' %}
 
 resources:
 {% for nodenum in range(1, 4) %}
@@ -39,7 +38,7 @@ resources:
           containers:
           - name: robustirc
             image: {{ IMAGE_PREFIX }}/robustirc
-            command: [ "/bin/sh", "-c", "rm -rf /var/lib/robustirc/*; echo '[\"robustirc-node-1:8443\",\"robustirc-node-2:8443\",\"robustirc-node-3:8443\"]' > /var/lib/robustirc/peers.json && exec /usr/bin/robustirc -listen=:8443 -network_name=loadtest -network_password=k8s -peer_addr=robustirc-node-{{ nodenum }}:8443 -tls_cert_path=/etc/robustirc/tls/cert.pem -tls_ca_file=/etc/robustirc/tls/cert.pem -tls_key_path=/etc/robustirc/tls/key.pem -pre1.0_protobuf"]
+            command: [ "/bin/sh", "-c", "rm -rf /var/lib/robustirc/* && exec /usr/bin/robustirc -listen=:8443 -network_name=loadtest -network_password=k8s -peer_addr=robustirc-node-{{ nodenum }}:8443 -tls_cert_path=/etc/robustirc/tls/cert.pem -tls_ca_file=/etc/robustirc/tls/cert.pem -tls_key_path=/etc/robustirc/tls/key.pem -pre1.0_protobuf {% if nodenum == 1 %} -singlenode {% else %} -join=robustirc-node-1:8443 {% endif %}"]
             # Always do a docker pull when starting this pod to always pick up the
             # latest robustirc Docker container version.
             imagePullPolicy: Always
@@ -221,7 +220,7 @@ resources:
           containers:
           - name: prometheus
             image: prom/prometheus
-            args: ["-config.file=/etc/prometheus-config/prometheus.conf"]
+            args: ["--config.file=/etc/prometheus-config/prometheus.conf"]
             imagePullPolicy: Always
             ports:
             - name: prometheus
